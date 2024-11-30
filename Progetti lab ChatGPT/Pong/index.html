@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gioco Pong</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #222;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            background-color: #000;
+        }
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            color: #fff;
+        }
+        #gameOver button {
+            background-color: #00f;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            margin-top: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="pong" width="800" height="400"></canvas>
+    <div id="gameOver">
+        <h2>Game Over</h2>
+        <p id="finalScore"></p>
+        <button onclick="restartGame()">Gioca di nuovo</button>
+    </div>
+    <script>
+        const canvas = document.getElementById("pong");
+        const context = canvas.getContext("2d");
+
+        // Configurazione della pallina
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 10,
+            speed: 4,
+            dx: 4,
+            dy: 4,
+            visible: true
+        };
+
+        // Configurazione delle racchette
+        const paddleWidth = 10;
+        const paddleHeight = 100;
+        const player = { x: 0, y: canvas.height / 2 - paddleHeight / 2, width: paddleWidth, height: paddleHeight, dy: 5 };
+        const ai = { x: canvas.width - paddleWidth, y: canvas.height / 2 - paddleHeight / 2, width: paddleWidth, height: paddleHeight, dy: 4 };
+
+        // Sistema di punteggio
+        let playerScore = 0;
+        let aiScore = 0;
+        const maxScore = 10;
+
+        // Variabili per il ritardo dell'IA
+        let aiPaused = false;
+        let aiPauseInterval = getRandomInterval(2000, 5000); // Intervallo casuale tra 2 e 5 secondi
+        let aiPauseDuration = 1000; // Si ferma per 1 secondo
+        let lastPauseTime = Date.now();
+
+        // Funzione per generare un intervallo casuale tra min e max millisecondi
+        function getRandomInterval(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        // Disegna un rettangolo
+        function drawRect(x, y, w, h, color) {
+            context.fillStyle = color;
+            context.fillRect(x, y, w, h);
+        }
+
+        // Disegna la pallina
+        function drawBall() {
+            if (ball.visible) {
+                context.fillStyle = "#fff";
+                context.beginPath();
+                context.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                context.closePath();
+                context.fill();
+            }
+        }
+
+        // Resetta la pallina e assegna punto
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.dx *= -1;
+        }
+
+        // Movimento della pallina
+        function moveBall() {
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            if (ball.y + ball.radius > canvas.height || ball.y - ball.radius < 0) {
+                ball.dy *= -1; // Rimbalza in alto e in basso
+            }
+
+            // Controllo collisione con la racchetta del giocatore
+            if (ball.x - ball.radius < player.x + player.width && ball.y > player.y && ball.y < player.y + player.height) {
+                ball.dx *= -1; // Rimbalza dalla racchetta del giocatore
+            }
+
+            // Controllo collisione con la racchetta dell'IA
+            if (ball.x + ball.radius > ai.x && ball.y > ai.y && ball.y < ai.y + ai.height) {
+                ball.dx *= -1; // Rimbalza dalla racchetta dell'IA
+            }
+
+            // Punto segnato dall'IA
+            if (ball.x - ball.radius < 0) {
+                aiScore++;
+                checkGameOver();
+                resetBall();
+            }
+
+            // Punto segnato dal giocatore
+            if (ball.x + ball.radius > canvas.width) {
+                playerScore++;
+                checkGameOver();
+                resetBall();
+            }
+        }
+
+        // Movimento delle racchette
+        function movePaddles() {
+            if (upPressed && player.y > 0) {
+                player.y -= player.dy;
+            }
+            if (downPressed && player.y < canvas.height - player.height) {
+                player.y += player.dy;
+            }
+
+            // Movimento dell'IA con pausa ogni 2-5 secondi per 1 secondo
+            const now = Date.now();
+            if (now - lastPauseTime >= aiPauseInterval) {
+                aiPaused = true;
+                setTimeout(() => {
+                    aiPaused = false;
+                    lastPauseTime = Date.now();
+                    aiPauseInterval = getRandomInterval(2000, 5000); // Nuovo intervallo casuale tra 2 e 5 secondi
+                }, aiPauseDuration);
+            }
+
+            if (!aiPaused) {
+                if (ai.y + ai.height / 2 < ball.y - 20) {
+                    ai.y += ai.dy;
+                } else if (ai.y + ai.height / 2 > ball.y + 20) {
+                    ai.y -= ai.dy;
+                }
+            }
+        }
+
+        // Disegna tutto
+        function draw() {
+            drawRect(0, 0, canvas.width, canvas.height, "#000"); // Sfondo
+            drawRect(player.x, player.y, player.width, player.height, "#00f"); // Racchetta giocatore
+            drawRect(ai.x, ai.y, ai.width, ai.height, "#f00"); // Racchetta IA
+            drawBall(); // Pallina
+
+            // Disegna i punteggi
+            context.fillStyle = "#fff";
+            context.font = "20px Arial";
+            context.fillText(`Giocatore: ${playerScore}`, 50, 30);
+            context.fillText(`IA: ${aiScore}`, canvas.width - 150, 30);
+        }
+
+        // Aggiorna il gioco
+        function update() {
+            if (ball.visible) {
+                moveBall();
+            }
+            movePaddles();
+        }
+
+        // Controllo fine partita
+        function checkGameOver() {
+            if (playerScore === maxScore || aiScore === maxScore) {
+                ball.visible = false; // Nasconde la pallina
+                document.getElementById("finalScore").innerText = `Giocatore: ${playerScore} - IA: ${aiScore}`;
+                document.getElementById("gameOver").style.display = "block";
+                cancelAnimationFrame(animationFrame);
+            }
+        }
+
+        // Funzione di loop
+        let animationFrame;
+        function gameLoop() {
+            draw();
+            update();
+            animationFrame = requestAnimationFrame(gameLoop);
+        }
+
+        // Controlli per il giocatore
+        let upPressed = false;
+        let downPressed = false;
+
+        window.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowUp") upPressed = true;
+            if (e.key === "ArrowDown") downPressed = true;
+        });
+
+        window.addEventListener("keyup", (e) => {
+            if (e.key === "ArrowUp") upPressed = false;
+            if (e.key === "ArrowDown") downPressed = false;
+        });
+
+        // Inizia il gioco
+        gameLoop();
+
+        // Riavvia il gioco
+        function restartGame() {
+            playerScore = 0;
+            aiScore = 0;
+            document.getElementById("gameOver").style.display = "none";
+            ball.visible = true;
+            resetBall();
+            gameLoop();
+        }
+    </script>
+</body>
+</html>
